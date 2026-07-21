@@ -1,0 +1,68 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+# ==============================================================================
+# Home Assistant Community App: Netmaker
+# Joins the netmaker network once, using an enrollment token
+# ==============================================================================
+declare token
+declare -a options=()
+declare value
+declare wait_counter=0
+
+readonly NODES_FILE="/etc/netclient/nodes.json"
+readonly WAIT_DELAY=2
+readonly WAIT_COUNT=30  # 30*2s = 60s
+
+# An enrollment token is required for a headless join. The token is a base64
+# blob that already embeds the netmaker server address, so nothing else is
+# needed to reach the server.
+token=$(bashio::config 'enrollment_token')
+if bashio::var.is_empty "${token}"; then
+  bashio::exit.nok \
+    "No 'enrollment_token' configured. Generate one in your Netmaker dashboard" \
+    "(Enrollment Keys) and set it in this app's configuration."
+fi
+
+# If this host is already registered to a network, don't join again. The daemon
+# keeps nodes.json populated; a non-empty object means we have joined before.
+if bashio::fs.file_exists "${NODES_FILE}" \
+  && jq --exit-status 'length > 0' "${NODES_FILE}" > /dev/null 2>&1; then
+  bashio::log.info "netclient is already joined to a network, skipping join"
+  exit 0
+fi
+
+# Build the optional join flags from configuration.
+if value=$(bashio::config 'host_name') && bashio::var.has_value "${value}"; then
+  options+=(-o "${value}")
+fi
+if bashio::config.has_value 'port' && [[ "$(bashio::config 'port')" -ne 0 ]]; then
+  options+=(-p "$(bashio::config 'port')")
+fi
+if value=$(bashio::config 'interface') && bashio::var.has_value "${value}"; then
+  options+=(-I "${value}")
+fi
+if value=$(bashio::config 'endpoint') && bashio::var.has_value "${value}"; then
+  options+=(-e "${value}")
+fi
+if value=$(bashio::config 'endpoint6') && bashio::var.has_value "${value}"; then
+  options+=(-E "${value}")
+fi
+if value=$(bashio::config 'firewall') && bashio::var.has_value "${value}"; then
+  options+=(-f "${value}")
+fi
+
+# Give the daemon a moment to initialize its config directory before joining.
+while [ ! -d /etc/netclient ]; do
+  if (( wait_counter++ == WAIT_COUNT )); then
+    break
+  fi
+  sleep "${WAIT_DELAY}"
+done
+
+bashio::log.info "Joining netmaker network..."
+if ! /opt/netclient join -t "${token}" "${options[@]}"; then
+  bashio::exit.nok "Failed to join the netmaker network"
+fi
+
+bashio::log.info "Successfully joined the netmaker network"

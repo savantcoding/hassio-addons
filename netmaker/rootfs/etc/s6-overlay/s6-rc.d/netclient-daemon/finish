@@ -1,0 +1,40 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+# ==============================================================================
+# Home Assistant Community App: Netmaker
+# Cleans up on daemon exit and takes down the S6 supervision tree on failure
+# ==============================================================================
+readonly exit_code_container=$(</run/s6-linux-init-container-results/exitcode)
+readonly exit_code_service="${1}"
+readonly exit_code_signal="${2}"
+readonly service="netclient-daemon"
+
+declare iface
+
+bashio::log.info \
+  "Service ${service} exited with code ${exit_code_service}" \
+  "(by signal ${exit_code_signal})"
+
+# Replicate the cleanup netclient's container entrypoint performs on shutdown.
+# The daemon is exec'd, so its own shell trap does not survive; do it here.
+iface=$(bashio::config 'interface')
+if bashio::var.is_empty "${iface}"; then
+  iface="netmaker"
+fi
+ip rule delete pref 3000 2> /dev/null || true
+ip rule delete pref 2500 2> /dev/null || true
+ip rule delete pref 2000 2> /dev/null || true
+ip link del "${iface}" 2> /dev/null || true
+
+if [[ "${exit_code_service}" -eq 256 ]]; then
+  if [[ "${exit_code_container}" -eq 0 ]]; then
+    echo $((128 + $exit_code_signal)) > /run/s6-linux-init-container-results/exitcode
+  fi
+  [[ "${exit_code_signal}" -eq 15 ]] && exec /run/s6/basedir/bin/halt
+elif [[ "${exit_code_service}" -ne 0 ]]; then
+  if [[ "${exit_code_container}" -eq 0 ]]; then
+    echo "${exit_code_service}" > /run/s6-linux-init-container-results/exitcode
+  fi
+  exec /run/s6/basedir/bin/halt
+fi

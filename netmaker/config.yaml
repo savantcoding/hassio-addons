@@ -1,0 +1,48 @@
+---
+name: Netmaker
+version: 1.0.0
+slug: netmaker
+description: Join your Home Assistant instance to a Netmaker WireGuard network
+url: https://github.com/savantcoding/hassio-addons/tree/main/netmaker
+image: ghcr.io/savantcoding/netmaker
+stage: experimental
+startup: services
+panel_icon: mdi:lan-connect
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+hassio_api: true
+host_network: true
+privileged:
+  - NET_ADMIN
+  - NET_RAW
+devices:
+  - /dev/net/tun
+map:
+  - type: homeassistant_config
+    read_only: false
+    path: /config
+  - type: share
+    read_only: false
+ports:
+  51821/udp: null
+options:
+  enrollment_token: ""
+  log_level: info
+  host_name: ""
+  port: 0
+  interface: ""
+  endpoint: ""
+  endpoint6: ""
+  firewall: ""
+schema:
+  enrollment_token: str
+  log_level: list(trace|debug|info|notice|warning|error|fatal)
+  host_name: str?
+  port: int(0,65535)?
+  interface: "match(^(?:netmaker[a-zA-Z0-9_-]*)?$)?"
+  endpoint: str?
+  endpoint6: str?
+  firewall: "match(^(?:iptables|nftables)?$)?"

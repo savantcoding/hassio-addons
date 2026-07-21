@@ -1,0 +1,45 @@
+---
+configuration:
+  enrollment_token:
+    name: Enrollment token
+    description: >-
+      The enrollment token (enrollment key) used to join your Netmaker network.
+      Generate one in your Netmaker dashboard under "Enrollment Keys" and paste
+      it here. The token already contains the address of your Netmaker server.
+  log_level:
+    name: Log level
+    description: >-
+      Controls the verbosity of the netclient logs. Set to "debug" or "trace"
+      when troubleshooting connection problems.
+  host_name:
+    name: Host name
+    description: >-
+      Optional name to register this device as within your Netmaker network.
+      Leave empty to use the default host name.
+  port:
+    name: WireGuard port
+    description: >-
+      Optional UDP port for WireGuard to listen on. Leave at 0 to let netclient
+      choose a port. If you set this, expose the same port in the Network section.
+  interface:
+    name: Interface name
+    description: >-
+      Optional name for the WireGuard network interface created on the host.
+      On Linux the name must start with "netmaker". Leave empty for the default.
+  endpoint:
+    name: Static endpoint (IPv4)
+    description: >-
+      Optional static public IPv4 endpoint for this host. Leave empty to let
+      Netmaker detect the endpoint automatically.
+  endpoint6:
+    name: Static endpoint (IPv6)
+    description: >-
+      Optional static public IPv6 endpoint for this host. Leave empty to let
+      Netmaker detect the endpoint automatically.
+  firewall:
+    name: Firewall
+    description: >-
+      Optional firewall backend to use for ACL enforcement (iptables or
+      nftables). Leave empty to let netclient auto-detect.
+network:
+  51821/udp: WireGuard port used by netclient

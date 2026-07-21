@@ -1,0 +1,39 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+# ==============================================================================
+# Home Assistant Community App: Netmaker
+# Runs the netclient daemon
+# ==============================================================================
+declare log_level
+declare verbosity
+
+bashio::log.info 'Starting Netmaker netclient...'
+
+# Netclient stores its host identity, keys and node/server config under the
+# hard-coded path /etc/netclient/. Persist it across restarts by pointing that
+# path at the add-on's /data volume so the node is not re-registered each boot.
+mkdir -p /data/netclient
+if [ ! -L /etc/netclient ]; then
+  # Migrate anything an earlier image may have written to the real directory
+  if [ -d /etc/netclient ] && [ ! -d /data/netclient/.migrated ]; then
+    cp -a /etc/netclient/. /data/netclient/ 2>/dev/null || true
+    rm -rf /etc/netclient
+  fi
+  ln -sf /data/netclient /etc/netclient
+fi
+
+# Map the app's log_level to netclient's numeric verbosity (0..4)
+log_level=$(bashio::config 'log_level')
+case "${log_level}" in
+  trace)                 verbosity=4 ;;
+  debug)                 verbosity=3 ;;
+  info|notice)           verbosity=2 ;;
+  warning)               verbosity=1 ;;
+  error|fatal)           verbosity=0 ;;
+  *)                     verbosity=2 ;;
+esac
+
+# Run the daemon in the foreground so s6 supervises it directly.
+# functions.Daemon() blocks and handles SIGTERM (clean shutdown) / SIGHUP (reload).
+exec /opt/netclient daemon -v "${verbosity}"

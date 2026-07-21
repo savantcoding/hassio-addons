@@ -1,0 +1,35 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+
+# Netclient has no queryable status socket, so this treats the app as:
+# - healthy while it is still trying to join (within HEALTHCHECK_RESTART_TIMEOUT)
+# - healthy once it has joined a network and the daemon process is running
+# - unhealthy if it never manages to join within HEALTHCHECK_RESTART_TIMEOUT
+
+# Redirect outputs to the log (&1 and &2 are not initialized by Docker)
+exec &> /proc/1/fd/1
+if [[ "${LOG_FD:-}" =~ ^[0-9]+$ ]]; then
+  eval "exec ${LOG_FD}>&1" || true
+fi
+
+readonly HEALTHCHECK_RESTART_TIMEOUT=3600  # 1 hour
+readonly NODES_FILE="/etc/netclient/nodes.json"
+
+# STARTED_TIMESTAMP is stored in contenv at /var/run/s6/container_environment
+if ! bashio::var.has_value "${STARTED_TIMESTAMP-}"; then
+  STARTED_TIMESTAMP=$(date +"%s")
+  printf "%s" "${STARTED_TIMESTAMP}" > /var/run/s6/container_environment/STARTED_TIMESTAMP
+fi
+
+# Healthy as soon as we are joined to at least one network.
+if bashio::fs.file_exists "${NODES_FILE}" \
+  && jq --exit-status 'length > 0' "${NODES_FILE}" > /dev/null 2>&1; then
+  exit 0
+fi
+
+# Not joined yet: stay healthy during the initial window, then fail so the
+# container is restarted.
+if (( $(date +"%s") - STARTED_TIMESTAMP > HEALTHCHECK_RESTART_TIMEOUT )); then
+  bashio::exit.nok "netclient has not joined a network within the expected time"
+fi

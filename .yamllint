@@ -1,0 +1,40 @@
+---
+rules:
+  braces:
+    level: error
+    max-spaces-inside: 1
+  brackets:
+    level: error
+    max-spaces-inside: 1
+  colons:
+    level: error
+  commas:
+    level: error
+  comments:
+    level: error
+  comments-indentation:
+    level: error
+  document-start:
+    level: error
+    present: true
+  empty-lines:
+    level: error
+  hyphens:
+    level: error
+  indentation:
+    level: error
+    spaces: 2
+    indent-sequences: true
+  key-duplicates:
+    level: error
+  line-length: disable
+  new-line-at-end-of-file:
+    level: error
+  new-lines:
+    level: error
+    type: unix
+  trailing-spaces:
+    level: error
+
+ignore: |
+  .github/
