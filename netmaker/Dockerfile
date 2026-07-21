@@ -34,6 +34,16 @@ RUN \
 # Copy root filesystem
 COPY rootfs /
 
+# Ensure service scripts are executable (git on some platforms drops the +x bit)
+RUN chmod 0755 \
+        /command/with-contenv-merge \
+        /usr/bin/healthcheck \
+        /etc/s6-overlay/s6-rc.d/local-network/run \
+        /etc/s6-overlay/s6-rc.d/netclient-daemon/run \
+        /etc/s6-overlay/s6-rc.d/netclient-daemon/finish \
+        /etc/s6-overlay/s6-rc.d/netclient-join/run \
+        /etc/s6-overlay/s6-rc.d/expose-homeassistant/run
+
 HEALTHCHECK \
     CMD healthcheck
 
