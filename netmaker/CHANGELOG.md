@@ -7,5 +7,5 @@
 - Non-interactive join via an enrollment token.
 - Persists the netclient host identity to the add-on's `/data` volume so the
   node survives restarts and updates.
-- Supports `aarch64`, `amd64` and `armv7`.
+- Supports `aarch64` and `amd64`.
 - Bundles `netclient` v1.6.0.

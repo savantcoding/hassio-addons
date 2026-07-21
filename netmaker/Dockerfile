@@ -24,7 +24,6 @@ RUN \
     \
     && if [ "${BUILD_ARCH}" = "aarch64" ]; then NETCLIENT_ARCH="arm64"; fi \
     && if [ "${BUILD_ARCH}" = "amd64" ]; then NETCLIENT_ARCH="amd64"; fi \
-    && if [ "${BUILD_ARCH}" = "armv7" ]; then NETCLIENT_ARCH="armv7"; fi \
     \
     && curl -J -L -s -o /opt/netclient \
         "https://github.com/gravitl/netclient/releases/download/${NETCLIENT_VERSION}/netclient-linux-${NETCLIENT_ARCH}" \

@@ -22,7 +22,7 @@ Add this repository to your Home Assistant instance:
 
 ### [Netmaker](./netmaker)
 
-![Supports aarch64][aarch64] ![Supports amd64][amd64] ![Supports armv7][armv7]
+![Supports aarch64][aarch64] ![Supports amd64][amd64]
 
 Join your Home Assistant instance to a [Netmaker][netmaker] WireGuard network
 using the Netmaker client (`netclient`). Provide an enrollment token from your
@@ -37,7 +37,6 @@ MIT — see [LICENSE.md](LICENSE.md).
 
 [aarch64]: https://img.shields.io/badge/aarch64-yes-green.svg
 [amd64]: https://img.shields.io/badge/amd64-yes-green.svg
-[armv7]: https://img.shields.io/badge/armv7-yes-green.svg
 [netmaker]: https://www.netmaker.io/
 [repository-badge]: https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg
 [repository-url]: https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fsavantcoding%2Fhassio-addons

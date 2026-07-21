@@ -2,7 +2,6 @@
 name: Builder
 
 # Builds and publishes the multi-arch add-on image to GHCR.
-# Publishes on pushes to main that touch the add-on, and on tags.
 
 on:
   push:
@@ -11,8 +10,6 @@ on:
     paths:
       - "netmaker/**"
       - ".github/workflows/builder.yaml"
-    tags:
-      - "*"
   pull_request:
     branches:
       - main
@@ -33,23 +30,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - aarch64
-          - amd64
-          - armv7
+        include:
+          - arch: aarch64
+            platform: linux/arm64
+            base: ghcr.io/hassio-addons/base/aarch64:21.0.0
+          - arch: amd64
+            platform: linux/amd64
+            base: ghcr.io/hassio-addons/base/amd64:21.0.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get add-on info
+      - name: Read add-on version
         id: info
         run: |
-          version=$(yq --no-colors eval '.version' "${ADDON}/config.yaml")
-          image=$(yq --no-colors eval '.image' "${ADDON}/config.yaml")
+          version=$(grep -E '^version:' "${ADDON}/config.yaml" | awk '{print $2}' | tr -d '"')
+          image=$(grep -E '^image:' "${ADDON}/config.yaml" | awk '{print $2}' | tr -d '"')
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "image=${image}" >> "$GITHUB_OUTPUT"
 
-      - name: Login to GitHub Container Registry
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
@@ -57,15 +63,61 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build ${{ matrix.arch }} add-on
-        uses: home-assistant/builder@2025.03.0
+      - name: Build and push ${{ matrix.arch }}
+        uses: docker/build-push-action@v6
         with:
-          args: |
-            ${{ github.event_name != 'pull_request' && '--docker-hub-check' || '' }} \
-            --${{ matrix.arch }} \
-            --target /data/${{ env.ADDON }} \
-            --image "${{ steps.info.outputs.image }}" \
-            --docker-user "${{ github.actor }}" \
-            --docker-password "${{ secrets.GITHUB_TOKEN }}" \
-            --addon \
-            ${{ github.event_name == 'pull_request' && '--test' || '' }}
+          context: ./${{ env.ADDON }}
+          file: ./${{ env.ADDON }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          provenance: false
+          build-args: |
+            BUILD_FROM=${{ matrix.base }}
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ steps.info.outputs.version }}
+            BUILD_NAME=Netmaker
+            BUILD_DESCRIPTION=Join your Home Assistant instance to a Netmaker WireGuard network
+            BUILD_REPOSITORY=${{ github.repository }}
+            BUILD_REF=${{ github.sha }}
+          tags: |
+            ${{ steps.info.outputs.image }}-${{ matrix.arch }}:${{ steps.info.outputs.version }}
+            ${{ steps.info.outputs.image }}-${{ matrix.arch }}:latest
+
+  manifest:
+    name: Publish manifest
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    env:
+      ADDON: netmaker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read add-on version
+        id: info
+        run: |
+          version=$(grep -E '^version:' "${ADDON}/config.yaml" | awk '{print $2}' | tr -d '"')
+          image=$(grep -E '^image:' "${ADDON}/config.yaml" | awk '{print $2}' | tr -d '"')
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifests
+        run: |
+          IMAGE="${{ steps.info.outputs.image }}"
+          VERSION="${{ steps.info.outputs.version }}"
+          for tag in "${VERSION}" "latest"; do
+            docker manifest create "${IMAGE}:${tag}" \
+              "${IMAGE}-aarch64:${tag}" \
+              "${IMAGE}-amd64:${tag}"
+            docker manifest push "${IMAGE}:${tag}"
+          done
