@@ -83,6 +83,42 @@ Optional firewall backend to use for ACL enforcement: `iptables` or `nftables`.
 Leave empty to let netclient auto-detect. If neither tool is available,
 netclient runs without firewall/ACL enforcement (the connection still works).
 
+### Option: `expose_homeassistant`
+
+By default, joining the mesh lets Home Assistant **reach** other nodes, but it
+does not make the Home Assistant frontend reachable **from** other nodes. When
+you enable this option, the add-on runs a built-in reverse proxy that serves
+Home Assistant on this node's mesh IP address, so any other device on your
+Netmaker network can open the Home Assistant UI.
+
+This is the same idea as the Tailscale add-on's "Tailscale Serve" feature.
+
+Disabled by default.
+
+### Option: `expose_port`
+
+The port on the mesh IP address that the Home Assistant frontend is served on
+when `expose_homeassistant` is enabled. Defaults to `8123`. For example, with
+the default, other nodes reach Home Assistant at `http://<mesh-ip>:8123`, where
+`<mesh-ip>` is this node's address in your network (shown in your Netmaker
+dashboard).
+
+### Exposing Home Assistant: required Home Assistant configuration
+
+Home Assistant, by default, blocks requests coming through a reverse proxy. To
+allow the `expose_homeassistant` proxy, add the following to your
+`configuration.yaml` and restart Home Assistant:
+
+```yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 127.0.0.1
+```
+
+The proxy runs on the same host as Home Assistant and forwards from
+`127.0.0.1`, which is why `127.0.0.1` is the trusted proxy.
+
 ## Network
 
 This app runs on the host network. netclient uses WireGuard over UDP; by

@@ -18,6 +18,7 @@ RUN \
         wireguard-tools \
         openresolv \
         coreutils \
+        nginx \
     \
     && ln -sf /sbin/xtables-nft-multi /sbin/ip6tables \
     && ln -sf /sbin/xtables-nft-multi /sbin/iptables \

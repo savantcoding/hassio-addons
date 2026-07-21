@@ -1,6 +1,6 @@
 ---
 name: Netmaker
-version: 1.0.0
+version: 1.1.0
 slug: netmaker
 description: Join your Home Assistant instance to a Netmaker WireGuard network
 url: https://github.com/savantcoding/hassio-addons/tree/main/netmaker
@@ -36,6 +36,8 @@ options:
   endpoint: ""
   endpoint6: ""
   firewall: ""
+  expose_homeassistant: false
+  expose_port: 8123
 schema:
   enrollment_token: str
   log_level: list(trace|debug|info|notice|warning|error|fatal)
@@ -45,3 +47,5 @@ schema:
   endpoint: str?
   endpoint6: str?
   firewall: "match(^(?:iptables|nftables)?$)?"
+  expose_homeassistant: bool
+  expose_port: int(1,65535)

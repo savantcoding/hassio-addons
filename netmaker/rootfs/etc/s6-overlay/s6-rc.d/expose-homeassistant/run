@@ -1,0 +1,91 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+# ==============================================================================
+# Home Assistant Community App: Netmaker
+# Exposes the Home Assistant frontend on the netmaker (mesh) interface, so
+# other nodes on the network can reach it. This is a userspace reverse proxy
+# (nginx) binding the mesh IP to Home Assistant on localhost - conceptually the
+# same approach the Tailscale add-on uses with "tailscale serve".
+# ==============================================================================
+readonly WAIT_DELAY=3
+readonly WAIT_COUNT=40   # 40*3s = 120s
+
+declare mesh_ip
+declare expose_port
+declare core_port
+declare iface
+declare wait_counter=0
+
+# If exposing is disabled, park the service (stay "up" without doing anything,
+# so s6 does not treat it as a crash-looping longrun).
+if ! bashio::config.true 'expose_homeassistant'; then
+  bashio::log.info "expose_homeassistant is disabled; Home Assistant is not shared on the mesh"
+  exec sleep infinity
+fi
+
+# Home Assistant is served on the host's loopback; this add-on is host-networked
+# so 127.0.0.1:<core_port> reaches it. Refuse if HA uses SSL (we proxy plain HTTP).
+if bashio::var.true "$(bashio::core.ssl)"; then
+  bashio::exit.nok \
+    "expose_homeassistant requires Home Assistant to be reachable over plain HTTP," \
+    "but SSL is enabled in your Home Assistant configuration."
+fi
+core_port=$(bashio::core.port)
+
+# Determine which mesh interface to bind to
+iface=$(bashio::config 'interface')
+if bashio::var.is_empty "${iface}"; then
+  iface="netmaker"
+fi
+
+# Wait until the mesh interface has been assigned an IP by netmaker
+bashio::log.info "Waiting for the ${iface} interface to get a mesh IP address..."
+while true; do
+  mesh_ip=$(ip -4 -o addr show "${iface}" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)
+  if bashio::var.has_value "${mesh_ip}"; then
+    break
+  fi
+  if (( wait_counter++ == WAIT_COUNT )); then
+    bashio::exit.nok \
+      "The ${iface} interface never received a mesh IP address." \
+      "Is this host joined to a network in your Netmaker dashboard?"
+  fi
+  sleep "${WAIT_DELAY}"
+done
+
+expose_port=$(bashio::config 'expose_port')
+if ! bashio::var.has_value "${expose_port}" || [[ "${expose_port}" -eq 0 ]]; then
+  expose_port=8123
+fi
+
+bashio::log.info "Exposing Home Assistant on ${mesh_ip}:${expose_port} (mesh)"
+
+# Render the nginx server block bound to the mesh IP
+cat > /etc/nginx/servers/homeassistant.conf <<NGINX
+server {
+    listen ${mesh_ip}:${expose_port};
+
+    include /etc/nginx/includes/server_params.conf;
+
+    location / {
+        proxy_pass http://127.0.0.1:${core_port};
+        include /etc/nginx/includes/proxy_params.conf;
+    }
+}
+NGINX
+
+# Wait for Home Assistant to answer on localhost before starting nginx
+wait_counter=0
+while (( 200 != $(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${core_port}") )); do
+  if (( wait_counter++ == WAIT_COUNT )); then
+    bashio::log.warning "Home Assistant is not answering yet; starting nginx anyway"
+    break
+  fi
+  bashio::log.info "Waiting for Home Assistant to be ready..."
+  sleep "${WAIT_DELAY}"
+done
+
+bashio::log.info "Home Assistant is now reachable on the mesh at http://${mesh_ip}:${expose_port}"
+
+exec nginx -g "daemon off;"

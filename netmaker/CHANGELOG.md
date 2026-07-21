@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0
+
+- Add `expose_homeassistant` option: run a built-in nginx reverse proxy that
+  serves the Home Assistant frontend on the netmaker (mesh) interface, so other
+  nodes on your network can reach Home Assistant. Conceptually the same approach
+  the Tailscale add-on uses with "tailscale serve".
+- Add `expose_port` option (default `8123`) to choose the mesh-side port.
+- When enabled, requires `use_x_forwarded_for` + `trusted_proxies` in your Home
+  Assistant configuration (see documentation).
+
 ## 1.0.0
 
 - Initial release.
