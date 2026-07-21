@@ -52,11 +52,11 @@ LABEL \
     io.hass.arch="${BUILD_ARCH}" \
     io.hass.type="addon" \
     io.hass.version=${BUILD_VERSION} \
-    maintainer="Savant Coder <ramirez.philip@gmail.com>" \
+    maintainer="SavantCoder <github@savant.io>" \
     org.opencontainers.image.title="${BUILD_NAME}" \
     org.opencontainers.image.description="${BUILD_DESCRIPTION}" \
     org.opencontainers.image.vendor="Savant Home Assistant Add-ons" \
-    org.opencontainers.image.authors="Savant Coder <ramirez.philip@gmail.com>" \
+    org.opencontainers.image.authors="SavantCoder <github@savant.io>" \
     org.opencontainers.image.licenses="MIT" \
     org.opencontainers.image.source="https://github.com/${BUILD_REPOSITORY}" \
     org.opencontainers.image.documentation="https://github.com/${BUILD_REPOSITORY}/blob/main/README.md" \
