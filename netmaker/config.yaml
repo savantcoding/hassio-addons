@@ -4,7 +4,7 @@ version: 1.3.0
 slug: netmaker
 description: Join your Home Assistant instance to a Netmaker WireGuard network
 url: https://github.com/savantcoding/hassio-addons/tree/main/netmaker
-image: ghcr.io/savantcoding/netmaker
+image: ghcr.io/savantcoding/app-netmaker
 stage: experimental
 startup: services
 ingress: true

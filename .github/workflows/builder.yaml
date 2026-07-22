@@ -82,6 +82,7 @@ jobs:
           tags: |
             ${{ steps.info.outputs.image }}-${{ matrix.arch }}:${{ steps.info.outputs.version }}
             ${{ steps.info.outputs.image }}-${{ matrix.arch }}:latest
+            ${{ steps.info.outputs.image }}-${{ matrix.arch }}:sha-${{ github.sha }}
 
   manifest:
     name: Publish manifest
@@ -115,9 +116,50 @@ jobs:
         run: |
           IMAGE="${{ steps.info.outputs.image }}"
           VERSION="${{ steps.info.outputs.version }}"
-          for tag in "${VERSION}" "latest"; do
+          SHA="${{ github.sha }}"
+          for tag in "${VERSION}" "latest" "sha-${SHA}"; do
             docker manifest create "${IMAGE}:${tag}" \
               "${IMAGE}-aarch64:${tag}" \
               "${IMAGE}-amd64:${tag}"
             docker manifest push "${IMAGE}:${tag}"
           done
+
+  release:
+    name: Tag release
+    needs: manifest
+    # Only tag on real pushes to main, never on PRs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ADDON: netmaker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read add-on version
+        id: info
+        run: |
+          version=$(grep -E '^version:' "${ADDON}/config.yaml" | awk '{print $2}' | tr -d '"')
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and release if new
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          TAG="${ADDON}-v${VERSION}"
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1 \
+            || gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Tag/release ${TAG} already exists — nothing to do."
+            exit 0
+          fi
+          echo "Creating release ${TAG} at ${GITHUB_SHA}"
+          gh release create "${TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "${ADDON} v${VERSION}" \
+            --notes "Automated release for ${ADDON} v${VERSION}.
+
+          Image: \`ghcr.io/${{ github.repository_owner }}/app-${ADDON}:${VERSION}\`
+          Commit: ${GITHUB_SHA}"
