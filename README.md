@@ -68,7 +68,7 @@ MIT License — see [LICENSE.md](LICENSE.md).
 [license-shield]: https://img.shields.io/github/license/savantcoding/hassio-addons.svg
 [maintenance-shield]: https://img.shields.io/maintenance/yes/2026.svg
 [netmaker]: https://www.netmaker.io/
-[netmaker-version-shield]: https://img.shields.io/badge/version-1.0.0-blue.svg
+[netmaker-version-shield]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsavantcoding%2Fhassio-addons%2Fmain%2Fnetmaker%2Fconfig.yaml&query=%24.version&label=version&prefix=v&color=blue
 [project-stage-shield]: https://img.shields.io/badge/project%20stage-experimental-yellow.svg
 [project-stage]: https://github.com/savantcoding/hassio-addons
 [repository-badge]: https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg

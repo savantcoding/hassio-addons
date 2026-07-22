@@ -32,4 +32,4 @@ See the [documentation][docs] for full installation and configuration details.
 [logo]: logo.png
 [netmaker]: https://www.netmaker.io/
 [stage-shield]: https://img.shields.io/badge/project%20stage-experimental-yellow.svg
-[version-shield]: https://img.shields.io/badge/version-1.2.0-blue.svg
+[version-shield]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsavantcoding%2Fhassio-addons%2Fmain%2Fnetmaker%2Fconfig.yaml&query=%24.version&label=version&prefix=v&color=blue
