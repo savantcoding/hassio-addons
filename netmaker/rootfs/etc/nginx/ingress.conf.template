@@ -21,7 +21,8 @@ http {
 
     server {
         # Home Assistant ingress connects from the Supervisor only.
-        listen 8099 default_server;
+        # %%INGRESS_PORT%% is replaced at startup with the Supervisor-assigned port.
+        listen %%INGRESS_PORT%% default_server;
 
         include /etc/nginx/includes/server_params.conf;
 

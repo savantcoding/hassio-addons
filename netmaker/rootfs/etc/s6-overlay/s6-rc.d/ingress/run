@@ -9,7 +9,13 @@ export LOG_FD
 # not collide with the optional expose-homeassistant reverse proxy, which uses
 # the default /etc/nginx/nginx.conf. It binds the ingress port only and is
 # restricted to the Supervisor ingress network (172.30.32.2).
+#
+# The ingress port is assigned dynamically by the Supervisor (config.yaml
+# intentionally omits ingress_port), so the nginx config is rendered from a
+# template at startup with the assigned port.
 # ==============================================================================
+declare ingress_port
+
 mkdir -p /tmp/nginx-ingress/client_body \
          /tmp/nginx-ingress/proxy \
          /tmp/nginx-ingress/fastcgi \
@@ -23,5 +29,13 @@ if [ ! -f /var/www/netmaker/status.json ]; then
     > /var/www/netmaker/status.json
 fi
 
-bashio::log.info "Starting Netmaker status panel (ingress)"
+# Render the nginx config with the Supervisor-assigned ingress port.
+ingress_port=$(bashio::addon.ingress_port)
+if ! bashio::var.has_value "${ingress_port}"; then
+  bashio::exit.nok "Could not determine the ingress port from the Supervisor"
+fi
+sed "s/%%INGRESS_PORT%%/${ingress_port}/g" \
+  /etc/nginx/ingress.conf.template > /etc/nginx/ingress.conf
+
+bashio::log.info "Starting Netmaker status panel (ingress) on port ${ingress_port}"
 exec nginx -c /etc/nginx/ingress.conf -g "daemon off;"
