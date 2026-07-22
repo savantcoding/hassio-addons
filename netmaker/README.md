@@ -7,8 +7,6 @@
 
 Join your Home Assistant instance to a Netmaker WireGuard network.
 
-![Netmaker logo][logo]
-
 ## About
 
 [Netmaker][netmaker] is a platform for creating and managing fast, secure
@@ -29,7 +27,6 @@ See the [documentation][docs] for full installation and configuration details.
 [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
 [amd64-shield]: https://img.shields.io/badge/amd64-yes-green.svg
 [docs]: DOCS.md
-[logo]: logo.png
 [netmaker]: https://www.netmaker.io/
 [stage-shield]: https://img.shields.io/badge/project%20stage-experimental-yellow.svg
 [version-shield]: https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsavantcoding%2Fhassio-addons%2Fmain%2Fnetmaker%2Fconfig.yaml&query=%24.version&label=version&prefix=v&color=blue
