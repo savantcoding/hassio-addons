@@ -1,0 +1,27 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+# ==============================================================================
+# Home Assistant Community App: Netmaker
+# Serves the read-only status panel through Home Assistant ingress.
+#
+# This is a dedicated nginx instance (own config + pid + temp paths) so it does
+# not collide with the optional expose-homeassistant reverse proxy, which uses
+# the default /etc/nginx/nginx.conf. It binds the ingress port only and is
+# restricted to the Supervisor ingress network (172.30.32.2).
+# ==============================================================================
+mkdir -p /tmp/nginx-ingress/client_body \
+         /tmp/nginx-ingress/proxy \
+         /tmp/nginx-ingress/fastcgi \
+         /tmp/nginx-ingress/uwsgi \
+         /tmp/nginx-ingress/scgi \
+         /var/www/netmaker
+
+# Provide a placeholder so the panel loads even before the first snapshot.
+if [ ! -f /var/www/netmaker/status.json ]; then
+  echo '{"generated":0,"nodes":[],"peers":[],"host":{},"system":{}}' \
+    > /var/www/netmaker/status.json
+fi
+
+bashio::log.info "Starting Netmaker status panel (ingress)"
+exec nginx -c /etc/nginx/ingress.conf -g "daemon off;"

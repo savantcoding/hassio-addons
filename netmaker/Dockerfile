@@ -42,7 +42,9 @@ RUN chmod 0755 \
         /etc/s6-overlay/s6-rc.d/netclient-daemon/run \
         /etc/s6-overlay/s6-rc.d/netclient-daemon/finish \
         /etc/s6-overlay/s6-rc.d/netclient-join/run \
-        /etc/s6-overlay/s6-rc.d/expose-homeassistant/run
+        /etc/s6-overlay/s6-rc.d/expose-homeassistant/run \
+        /etc/s6-overlay/s6-rc.d/ingress-status/run \
+        /etc/s6-overlay/s6-rc.d/ingress/run
 
 HEALTHCHECK \
     CMD healthcheck

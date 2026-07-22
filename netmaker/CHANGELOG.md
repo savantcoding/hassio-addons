@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+- Add a read-only status panel, accessible from the Home Assistant sidebar
+  (Netmaker) via ingress. It shows this node's network membership, mesh IP,
+  host identity (endpoint, keys, MTU, etc.), and a live table of WireGuard
+  peers with handshake age and transfer counters. Styled after the Netmaker
+  dashboard's node detail view.
+- The panel reads local netclient state and `wg show`; no Netmaker server API
+  access or credentials are involved. It is reachable only through Home
+  Assistant ingress (restricted to the Supervisor).
+
 ## 1.1.0
 
 - Add `expose_homeassistant` option: run a built-in nginx reverse proxy that

@@ -29,6 +29,27 @@ documentation for details:
 The host's WireGuard identity and keys are stored on the app's persistent
 `/data` volume, so your device stays the same node across restarts and updates.
 
+## Status panel
+
+Once the add-on is running, open it from the Home Assistant sidebar (the
+**Netmaker** entry) to see a read-only status panel. It shows:
+
+- Whether this node is connected, its network, and its mesh IP address.
+- Host details: node/host IDs, public endpoint, listen port, MAC, MTU,
+  persistent keepalive, and public key.
+- A live table of WireGuard peers, with each peer's endpoint, allowed IPs,
+  time since last handshake, and transfer counters.
+
+The panel reads the local `netclient` state and `wg show` output on this
+host. It does not talk to your Netmaker server and needs no credentials. It is
+served only through Home Assistant ingress, so it is reachable exclusively from
+within Home Assistant (the Supervisor), not from the network at large.
+
+The panel is intentionally read-only (the same approach the Tailscale add-on
+takes with its web UI). Change how this node joins the network through this
+add-on's **Configuration** options, and manage the network itself from your
+Netmaker dashboard.
+
 ## Configuration
 
 Example configuration:
@@ -42,6 +63,8 @@ interface: ""
 endpoint: ""
 endpoint6: ""
 firewall: ""
+expose_homeassistant: false
+expose_port: 8123
 ```
 
 ### Option: `enrollment_token` (required)

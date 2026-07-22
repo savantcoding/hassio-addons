@@ -1,0 +1,139 @@
+#!/command/with-contenv bashio
+# shellcheck shell=bash
+export LOG_FD
+# ==============================================================================
+# Home Assistant Community App: Netmaker
+# Periodically writes a status.json snapshot for the ingress web panel.
+#
+# netclient exposes no query socket, so this reads local state instead:
+#   - /etc/netclient/netclient.json  (host identity: name, keys, endpoint, MTU)
+#   - /etc/netclient/nodes.json      (per-network membership: network, address)
+#   - `wg show`                      (live WireGuard state: peers, handshakes)
+#   - `ip` / `uname`                 (interface address, OS/kernel)
+#
+# The panel polls this file; a few seconds of staleness is acceptable for a
+# read-only status view.
+# ==============================================================================
+readonly REFRESH_INTERVAL=5
+readonly OUT_DIR="/var/www/netmaker"
+readonly OUT_FILE="${OUT_DIR}/status.json"
+readonly TMP_FILE="${OUT_DIR}/.status.json.tmp"
+readonly HOST_CONFIG="/etc/netclient/netclient.json"
+readonly NODES_CONFIG="/etc/netclient/nodes.json"
+
+mkdir -p "${OUT_DIR}"
+
+# jq helper: first non-null value among several case-variant keys of an object.
+# Usage: pick <file> '<jq path to object>' Key key KEY
+# We resolve keys case-insensitively so we do not depend on netclient's exact
+# JSON tag casing (which has shifted across versions).
+readonly PICK='
+  def ci($k): to_entries | map(select(.key | ascii_downcase == ($k|ascii_downcase))) | (.[0].value // null);
+'
+
+client_version() {
+  netclient version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n1
+}
+
+build_json() {
+  local iface mesh_ip host_json nodes_json os kernel arch cver
+  local now
+  now=$(date +%s)
+
+  iface=$(bashio::config 'interface')
+  bashio::var.is_empty "${iface}" && iface="netmaker"
+
+  mesh_ip=$(ip -4 -o addr show "${iface}" 2>/dev/null \
+    | awk '{print $4}' | head -n1)
+
+  os="Linux"
+  kernel=$(uname -r 2>/dev/null)
+  arch=$(uname -m 2>/dev/null)
+  cver=$(client_version)
+
+  # Host identity from netclient.json (resilient to key casing / absence).
+  host_json='{}'
+  if [ -f "${HOST_CONFIG}" ]; then
+    host_json=$(jq -c "${PICK}"'
+      {
+        id:        ci(\"id\"),
+        name:      ci(\"name\"),
+        publickey: ci(\"publickey\"),
+        endpoint:  (ci(\"endpointip\") // ci(\"endpoint\")),
+        endpoint6: (ci(\"endpointipv6\") // ci(\"endpoint6\")),
+        listenport:(ci(\"listenport\") // ci(\"wglistenport\")),
+        mtu:       ci(\"mtu\"),
+        mac:       ci(\"macaddress\"),
+        keepalive: (ci(\"persistentkeepalive\") // null)
+      }' "${HOST_CONFIG}" 2>/dev/null || echo '{}')
+  fi
+
+  # Network membership from nodes.json. nodes.json is an object keyed by
+  # network name; take the first entry as "this node on this network".
+  nodes_json='[]'
+  if [ -f "${NODES_CONFIG}" ]; then
+    nodes_json=$(jq -c "${PICK}"'
+      [ to_entries[]
+        | .key as $net
+        | .value
+        | {
+            network:   ($net),
+            id:        ci(\"id\"),
+            address:   (ci(\"address\") // ci(\"address4\") // null),
+            address6:  (ci(\"address6\") // null),
+            connected: (ci(\"connected\") // null),
+            server:    ci(\"server\")
+          }
+      ]' "${NODES_CONFIG}" 2>/dev/null || echo '[]')
+  fi
+
+  # Live WireGuard peers for this interface.
+  local peers='[]'
+  if command -v wg >/dev/null 2>&1; then
+    peers=$(wg show "${iface}" dump 2>/dev/null | awk -v now="${now}" '
+      NR==1 { next }  # first line is the interface itself
+      {
+        # dump columns: pubkey presharedkey endpoint allowed-ips
+        #               latest-handshake rx tx keepalive
+        hs = $5 + 0
+        last = (hs > 0) ? (now - hs) : -1
+        printf "%s{\"publickey\":\"%s\",\"endpoint\":\"%s\",\"allowed\":\"%s\",\"handshake_age\":%d,\"rx\":%s,\"tx\":%s}",
+               (NR>2 ? "," : ""), $1, $3, $4, last, $6, $7
+      }
+      END { }
+    ')
+    peers="[${peers}]"
+    # Guard against an empty interface (no peers / iface down).
+    echo "${peers}" | jq empty >/dev/null 2>&1 || peers='[]'
+  fi
+
+  jq -n \
+    --argjson host "${host_json:-{}}" \
+    --argjson nodes "${nodes_json:-[]}" \
+    --argjson peers "${peers:-[]}" \
+    --arg iface "${iface}" \
+    --arg mesh_ip "${mesh_ip}" \
+    --arg os "${os}" \
+    --arg kernel "${kernel}" \
+    --arg arch "${arch}" \
+    --arg cver "${cver}" \
+    --argjson ts "${now}" \
+    '{
+      generated: $ts,
+      interface: $iface,
+      mesh_ip:   $mesh_ip,
+      system:    { os: $os, kernel: $kernel, arch: $arch, client_version: $cver },
+      host:      $host,
+      nodes:     $nodes,
+      peers:     $peers
+    }'
+}
+
+bashio::log.info "Starting Netmaker ingress status writer (every ${REFRESH_INTERVAL}s)"
+
+while true; do
+  if build_json > "${TMP_FILE}" 2>/dev/null && [ -s "${TMP_FILE}" ]; then
+    mv -f "${TMP_FILE}" "${OUT_FILE}"
+  fi
+  sleep "${REFRESH_INTERVAL}"
+done
