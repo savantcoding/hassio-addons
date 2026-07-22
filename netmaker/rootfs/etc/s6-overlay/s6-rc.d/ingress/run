@@ -30,7 +30,7 @@ if [ ! -f /var/www/netmaker/status.json ]; then
 fi
 
 # Render the nginx config with the Supervisor-assigned ingress port.
-ingress_port=$(bashio::addon.ingress_port)
+ingress_port=$(bashio::addon.ingress_port 2>/dev/null || bashio::app.ingress_port)
 if ! bashio::var.has_value "${ingress_port}"; then
   bashio::exit.nok "Could not determine the ingress port from the Supervisor"
 fi

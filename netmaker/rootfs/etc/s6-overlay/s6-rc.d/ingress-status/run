@@ -5,14 +5,17 @@ export LOG_FD
 # Home Assistant Community App: Netmaker
 # Periodically writes a status.json snapshot for the ingress web panel.
 #
-# netclient exposes no query socket, so this reads local state instead:
-#   - /etc/netclient/netclient.json  (host identity: name, keys, endpoint, MTU)
-#   - /etc/netclient/nodes.json      (per-network membership: network, address)
-#   - `wg show`                      (live WireGuard state: peers, handshakes)
-#   - `ip` / `uname`                 (interface address, OS/kernel)
+# netclient exposes no query socket, and its on-disk netclient.json stores some
+# fields in encoded/raw form (public key as a byte array, MAC base64, etc.), so
+# the presentable networking values come from the live interface instead:
+#   - `wg show <iface>`          host public key, listen port, and peers
+#   - `ip addr` / `ip link`      mesh IP address and MTU
+#   - /etc/netclient/netclient.json   host id, name, keepalive (plain scalars)
+#   - /etc/netclient/nodes.json       network name, node id, connected, address
+#   - `uname` / `netclient version`   OS, kernel, client version
 #
-# The panel polls this file; a few seconds of staleness is acceptable for a
-# read-only status view.
+# The panel polls this file; a few seconds of staleness is fine for a read-only
+# status view.
 # ==============================================================================
 readonly REFRESH_INTERVAL=5
 readonly OUT_DIR="/var/www/netmaker"
@@ -23,109 +26,125 @@ readonly NODES_CONFIG="/etc/netclient/nodes.json"
 
 mkdir -p "${OUT_DIR}"
 
-# jq helper: first non-null value among several case-variant keys of an object.
-# Usage: pick <file> '<jq path to object>' Key key KEY
-# We resolve keys case-insensitively so we do not depend on netclient's exact
-# JSON tag casing (which has shifted across versions).
-readonly PICK='
-  def ci($k): to_entries | map(select(.key | ascii_downcase == ($k|ascii_downcase))) | (.[0].value // null);
-'
-
 client_version() {
   netclient version 2>/dev/null | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | head -n1
 }
 
 build_json() {
-  local iface mesh_ip host_json nodes_json os kernel arch cver
-  local now
+  local iface mesh_ip mtu wg_pubkey wg_port
+  local host_id host_name keepalive
+  local nodes_json peers os kernel arch cver now
   now=$(date +%s)
 
   iface=$(bashio::config 'interface')
   bashio::var.is_empty "${iface}" && iface="netmaker"
 
+  # --- Interface facts (source of truth for presentable values) -------------
   mesh_ip=$(ip -4 -o addr show "${iface}" 2>/dev/null \
-    | awk '{print $4}' | head -n1)
+    | awk '{print $4}' | cut -d/ -f1 | head -n1)
+  mtu=$(ip -o link show "${iface}" 2>/dev/null \
+    | sed -n 's/.*mtu \([0-9]*\).*/\1/p' | head -n1)
+
+  # `wg show <iface>` first block describes the interface itself.
+  wg_pubkey=$(wg show "${iface}" public-key 2>/dev/null)
+  wg_port=$(wg show "${iface}" listen-port 2>/dev/null)
+
+  # --- Host identity (plain-string fields only) -----------------------------
+  host_id=""; host_name=""; keepalive=""
+  if [ -f "${HOST_CONFIG}" ]; then
+    host_id=$(jq -r '.id // empty' "${HOST_CONFIG}" 2>/dev/null)
+    host_name=$(jq -r '.name // empty' "${HOST_CONFIG}" 2>/dev/null)
+    keepalive=$(jq -r '.persistentkeepalive // empty' "${HOST_CONFIG}" 2>/dev/null)
+  fi
 
   os="Linux"
   kernel=$(uname -r 2>/dev/null)
   arch=$(uname -m 2>/dev/null)
   cver=$(client_version)
 
-  # Host identity from netclient.json (resilient to key casing / absence).
-  host_json='{}'
-  if [ -f "${HOST_CONFIG}" ]; then
-    host_json=$(jq -c "${PICK}"'
-      {
-        id:        ci(\"id\"),
-        name:      ci(\"name\"),
-        publickey: ci(\"publickey\"),
-        endpoint:  (ci(\"endpointip\") // ci(\"endpoint\")),
-        endpoint6: (ci(\"endpointipv6\") // ci(\"endpoint6\")),
-        listenport:(ci(\"listenport\") // ci(\"wglistenport\")),
-        mtu:       ci(\"mtu\"),
-        mac:       ci(\"macaddress\"),
-        keepalive: (ci(\"persistentkeepalive\") // null)
-      }' "${HOST_CONFIG}" 2>/dev/null || echo '{}')
-  fi
-
-  # Network membership from nodes.json. nodes.json is an object keyed by
-  # network name; take the first entry as "this node on this network".
+  # --- Network membership from nodes.json -----------------------------------
+  # nodes.json is an object keyed by network name; each node's `address` is an
+  # object {IP, Mask}, so reach into .address.IP.
   nodes_json='[]'
   if [ -f "${NODES_CONFIG}" ]; then
-    nodes_json=$(jq -c "${PICK}"'
+    nodes_json=$(jq -c '
       [ to_entries[]
         | .key as $net
         | .value
         | {
-            network:   ($net),
-            id:        ci(\"id\"),
-            address:   (ci(\"address\") // ci(\"address4\") // null),
-            address6:  (ci(\"address6\") // null),
-            connected: (ci(\"connected\") // null),
-            server:    ci(\"server\")
+            network:   (.network // $net),
+            id:        (.id // null),
+            address:   ((.address.IP // .address // null)
+                        | if . == "" then null else . end),
+            address6:  ((.address6.IP // .address6 // null)
+                        | if . == "" then null else . end),
+            connected: (.connected // null),
+            server:    (.server // null)
           }
-      ]' "${NODES_CONFIG}" 2>/dev/null || echo '[]')
+      ]' "${NODES_CONFIG}" 2>/dev/null) || nodes_json='[]'
+    [ -z "${nodes_json}" ] && nodes_json='[]'
   fi
 
-  # Live WireGuard peers for this interface.
-  local peers='[]'
+  # --- Live WireGuard peers -------------------------------------------------
+  # `wg show <iface> dump`: line 1 is the interface; peer columns are
+  # pubkey psk endpoint allowed-ips latest-handshake rx tx keepalive
+  peers='[]'
   if command -v wg >/dev/null 2>&1; then
     peers=$(wg show "${iface}" dump 2>/dev/null | awk -v now="${now}" '
-      NR==1 { next }  # first line is the interface itself
+      NR == 1 { next }
       {
-        # dump columns: pubkey presharedkey endpoint allowed-ips
-        #               latest-handshake rx tx keepalive
         hs = $5 + 0
         last = (hs > 0) ? (now - hs) : -1
+        gsub(/"/, "", $3); gsub(/"/, "", $4)
         printf "%s{\"publickey\":\"%s\",\"endpoint\":\"%s\",\"allowed\":\"%s\",\"handshake_age\":%d,\"rx\":%s,\"tx\":%s}",
-               (NR>2 ? "," : ""), $1, $3, $4, last, $6, $7
+               (c++ ? "," : ""), $1, $3, $4, last, ($6+0), ($7+0)
       }
-      END { }
     ')
     peers="[${peers}]"
-    # Guard against an empty interface (no peers / iface down).
     echo "${peers}" | jq empty >/dev/null 2>&1 || peers='[]'
   fi
 
+  # --- Assemble -------------------------------------------------------------
   jq -n \
-    --argjson host "${host_json:-{}}" \
-    --argjson nodes "${nodes_json:-[]}" \
-    --argjson peers "${peers:-[]}" \
+    --argjson nodes "${nodes_json}" \
+    --argjson peers "${peers}" \
     --arg iface "${iface}" \
     --arg mesh_ip "${mesh_ip}" \
+    --arg mtu "${mtu}" \
+    --arg pubkey "${wg_pubkey}" \
+    --arg port "${wg_port}" \
+    --arg host_id "${host_id}" \
+    --arg host_name "${host_name}" \
+    --arg keepalive "${keepalive}" \
     --arg os "${os}" \
     --arg kernel "${kernel}" \
     --arg arch "${arch}" \
     --arg cver "${cver}" \
     --argjson ts "${now}" \
-    '{
+    '
+    def nz: if . == "" or . == null then null else . end;
+    def num: nz | if . == null then null else tonumber end;
+    {
       generated: $ts,
       interface: $iface,
-      mesh_ip:   $mesh_ip,
-      system:    { os: $os, kernel: $kernel, arch: $arch, client_version: $cver },
-      host:      $host,
-      nodes:     $nodes,
-      peers:     $peers
+      mesh_ip:   ($mesh_ip | nz),
+      system:    {
+        os: $os,
+        kernel: ($kernel | nz),
+        arch: ($arch | nz),
+        client_version: ($cver | nz)
+      },
+      host: {
+        id:         ($host_id | nz),
+        name:       ($host_name | nz),
+        publickey:  ($pubkey | nz),
+        listenport: ($port | num),
+        mtu:        ($mtu | num),
+        # netclient stores persistentkeepalive in nanoseconds; show seconds.
+        keepalive:  ($keepalive | num | if . == null then null else (. / 1000000000) end)
+      },
+      nodes: $nodes,
+      peers: $peers
     }'
 }
 

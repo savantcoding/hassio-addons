@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+- Fix the status panel showing empty values. The writer now sources the
+  presentable networking values from the live interface (`wg show` for the
+  host public key, listen port, and peers; `ip` for the mesh IP and MTU),
+  since `netclient.json` stores those in raw/encoded form. Node address is
+  read from the `nodes.json` address object, and persistent keepalive is
+  converted from nanoseconds to seconds.
+- Drop the Endpoint and MAC rows from the panel: a WireGuard interface has no
+  MAC, and the host's public endpoint is only known to the Netmaker server,
+  not locally.
+- Use the Supervisor-assigned ingress port (avoids the hardcoded-port lint
+  error) and silence the `bashio::addon.ingress_port` deprecation warning.
+
 ## 1.2.0
 
 - Add a read-only status panel, accessible from the Home Assistant sidebar

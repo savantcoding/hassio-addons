@@ -448,10 +448,7 @@
     var globalHtml =
       row("ID", host.id, { mono: true, copy: true }) +
       row("Name", host.name, { copy: true }) +
-      row("Endpoint (IPv4)", host.endpoint, { mono: true, copy: true }) +
-      row("Endpoint (IPv6)", host.endpoint6, { mono: true, copy: true }) +
       row("Listen Port", host.listenport, { mono: true }) +
-      row("MAC Address", host.mac, { mono: true }) +
       row("MTU", host.mtu, { mono: true }) +
       (hasVal(host.keepalive)
         ? row("Persistent Keepalive", host.keepalive + "s", { mono: true })
